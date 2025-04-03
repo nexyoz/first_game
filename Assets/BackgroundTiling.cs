@@ -5,6 +5,7 @@ public class BackgroundTiling : MonoBehaviour
     [Header("Tiling Settings")]
     [SerializeField] private Vector2 tiling = new Vector2(1, 1); // 平铺重复次数
     [SerializeField] private Sprite backgroundSprite; // 背景精灵
+    [SerializeField] private Material customMaterial; // 添加自定义材质字段
     
     [Header("Scrolling Settings")]
     [SerializeField] private float scrollSpeed = 0.1f; // 滚动速度
@@ -34,15 +35,35 @@ public class BackgroundTiling : MonoBehaviour
     {
         if (scrollEnabled && material != null)
         {
-            // 更新偏移值，负值表示向下移动
-            offset.y -= scrollSpeed * Time.deltaTime;
-            
-            // 防止偏移值过大，当超过1时进行重置
-            if (offset.y < -1f)
-                offset.y += 1f;
+            try
+            {
+                // 更新偏移值，负值表示向下移动
+                offset.y -= scrollSpeed * Time.deltaTime;
                 
-            // 应用偏移值到材质
-            material.mainTextureOffset = offset;
+                // 防止偏移值过大，当超过1时进行重置
+                if (offset.y < -1f)
+                    offset.y += 1f;
+                    
+                // 应用偏移值到材质
+                material.mainTextureOffset = offset;
+                
+                // 尝试更新不同着色器使用的属性
+                if (material.HasProperty("_MainTex_ST"))
+                {
+                    Vector4 st = material.GetVector("_MainTex_ST");
+                    material.SetVector("_MainTex_ST", new Vector4(st.x, st.y, offset.x, offset.y));
+                }
+                
+                if (material.HasProperty("_BaseMap_ST"))
+                {
+                    Vector4 st = material.GetVector("_BaseMap_ST");
+                    material.SetVector("_BaseMap_ST", new Vector4(st.x, st.y, offset.x, offset.y));
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError("更新材质偏移时出错: " + e.Message);
+            }
         }
     }
 
@@ -102,20 +123,51 @@ public class BackgroundTiling : MonoBehaviour
 
     private void SetupMaterial()
     {
-        // 创建一个使用Unlit/Texture着色器的材质
-        material = new Material(Shader.Find("Unlit/Texture"));
+        // 优先使用预设的自定义材质
+        if (customMaterial != null)
+        {
+            material = new Material(customMaterial);
+        }
+        else
+        {
+            // 使用最基础的内置着色器
+            material = new Material(Shader.Find("Mobile/Unlit (Supports Lightmap)"));
+            
+            // 如果上面的着色器不可用，尝试更多备选项
+            if (material.shader == null)
+            {
+                material = new Material(Shader.Find("Mobile/Particles/Alpha Blended"));
+            }
+            
+            if (material.shader == null)
+            {
+                material = new Material(Shader.Find("Unlit/Texture"));
+            }
+            
+            // 最后使用完全内置的透明着色器
+            if (material.shader == null)
+            {
+                material = new Material(Shader.Find("Transparent/Diffuse"));
+            }
+        }
         
         // 如果提供了精灵，使用它的纹理
         if (backgroundSprite != null)
         {
             material.mainTexture = backgroundSprite.texture;
+            
+            // 确保纹理被设置为可读写和可重复
+            if (material.mainTexture != null)
+            {
+                material.mainTexture.wrapMode = TextureWrapMode.Repeat;
+            }
         }
-        
-        // 设置纹理环绕模式
-        material.mainTexture.wrapMode = TextureWrapMode.Repeat;
         
         // 应用到渲染器
         meshRenderer.material = material;
+        
+        // 立即更新平铺设置
+        UpdateTiling();
     }
 
     // 调整大小以适配相机视图
@@ -136,15 +188,50 @@ public class BackgroundTiling : MonoBehaviour
     {
         if (material != null)
         {
-            // 获取当前属性
-            meshRenderer.GetPropertyBlock(propertyBlock);
-            
-            // 设置主纹理的缩放
-            material.mainTextureScale = tiling;
-            
-            // 应用属性块
-            meshRenderer.SetPropertyBlock(propertyBlock);
+            try
+            {
+                // 直接设置主纹理的缩放
+                material.mainTextureScale = tiling;
+                
+                // 尝试多种方式设置纹理平铺参数
+                if (material.HasProperty("_MainTex_ST"))
+                {
+                    material.SetVector("_MainTex_ST", new Vector4(tiling.x, tiling.y, offset.x, offset.y));
+                }
+                
+                if (material.HasProperty("_BaseMap_ST")) // URP着色器
+                {
+                    material.SetVector("_BaseMap_ST", new Vector4(tiling.x, tiling.y, offset.x, offset.y));
+                }
+                
+                // 确保网格有正确的UV坐标
+                UpdateMeshUVs();
+                
+                // 为确保属性更新，强制刷新材质
+                meshRenderer.GetPropertyBlock(propertyBlock);
+                meshRenderer.SetPropertyBlock(propertyBlock);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError("更新平铺设置时出错: " + e.Message);
+            }
         }
+    }
+
+    private void UpdateMeshUVs()
+    {
+        if (meshFilter == null || meshFilter.mesh == null) return;
+        
+        Mesh mesh = meshFilter.mesh;
+        Vector2[] uvs = new Vector2[4]
+        {
+            new Vector2(0, 0),
+            new Vector2(tiling.x, 0),
+            new Vector2(tiling.x, tiling.y),
+            new Vector2(0, tiling.y)
+        };
+        
+        mesh.uv = uvs;
     }
     
     // 设置滚动速度
