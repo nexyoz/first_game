@@ -30,6 +30,41 @@ public class move : MonoBehaviour
             // 初始显示第一帧
             spriteRenderer.sprite = fanFrames[0];
         }
+        
+        // 确保有碰撞器，并设置为触发器
+        Collider2D collider = GetComponent<Collider2D>();
+        if (collider == null)
+        {
+            // 添加圆形碰撞器
+            CircleCollider2D circleCollider = gameObject.AddComponent<CircleCollider2D>();
+            circleCollider.radius = 0.4f; // 调整合适的半径
+            circleCollider.isTrigger = true; // 设置为触发器
+            Debug.Log("已自动添加圆形触发器到风扇");
+        }
+        else
+        {
+            // 确保现有的碰撞器是触发器
+            collider.isTrigger = true;
+            Debug.Log("已将现有碰撞器设置为触发器");
+        }
+        
+        // 设置标签
+        if (string.IsNullOrEmpty(gameObject.tag))
+        {
+            gameObject.tag = "trap";
+            Debug.Log("已将风扇标签设为trap");
+        }
+        
+        // 添加Rigidbody2D以确保触发器正常工作
+        if (GetComponent<Rigidbody2D>() == null)
+        {
+            Rigidbody2D rb = gameObject.AddComponent<Rigidbody2D>();
+            rb.bodyType = RigidbodyType2D.Kinematic;
+            rb.simulated = true;
+            Debug.Log("已添加Kinematic Rigidbody2D到风扇");
+        }
+        
+        Debug.Log("风扇已初始化，isDeadly: " + isDeadly);
     }
 
     // Update is called once per frame
@@ -76,19 +111,29 @@ public class move : MonoBehaviour
     // 处理玩家死亡的函数
     private void KillPlayer(GameObject player)
     {
-        // 可以在这里添加死亡效果，如粒子效果
-        Debug.Log("玩家被风扇杀死");
+        // 添加日志确认被调用
+        Debug.Log("风扇杀死玩家 - 游戏结束");
         
-        // 销毁玩家对象或调用玩家的死亡函数
-        // 根据您的游戏设计可以选择以下方式之一：
-        
-        // 方式1：直接销毁
-        // Destroy(player);
-        
-        // 方式2：调用玩家脚本中的死亡方法
-        player.GetComponent<PlayerController>()?.Die();
-        
-        // 方式3：发送消息
-        // player.SendMessage("Die", SendMessageOptions.DontRequireReceiver);
+        // 尝试获取player脚本并调用Die方法
+        player player_script = player.GetComponent<player>();
+        if (player_script != null)
+        {
+            player_script.Die();
+        }
+        else
+        {
+            // 如果没有找到player脚本，尝试PlayerController
+            PlayerController controller = player.GetComponent<PlayerController>();
+            if (controller != null)
+            {
+                controller.Die();
+            }
+            else
+            {
+                Debug.LogError("无法找到玩家脚本！无法执行死亡逻辑");
+                // 直接销毁玩家对象作为后备方案
+                Destroy(player);
+            }
+        }
     }
 }

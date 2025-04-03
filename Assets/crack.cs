@@ -9,26 +9,35 @@ public class crack : MonoBehaviour
     public string playerTag = "Player"; // 玩家标签
 
     private Vector3 originalPosition;   // 原始位置
-    private Rigidbody rb;               // 刚体组件
+    private Rigidbody2D rb;               // 刚体组件
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         // 获取刚体组件
-        rb = GetComponent<Rigidbody>();
+        rb = GetComponent<Rigidbody2D>();
         
         // 如果没有刚体组件，则添加一个
         if (rb == null)
         {
-            rb = gameObject.AddComponent<Rigidbody>();
+            rb = gameObject.AddComponent<Rigidbody2D>();
         }
         
-        // 初始化时关闭重力，直到需要下落
-        rb.useGravity = false;
-        rb.isKinematic = true;
+        // 初始化时关闭重力
+        rb.gravityScale = 0;
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        
+        // 初始化isFalling为false，确保重载场景时重置状态
+        isFalling = false;
         
         // 保存原始位置
         originalPosition = transform.position;
+        
+        // 确保位置正确
+        transform.position = originalPosition;
+        
+        // 添加调试信息
+        Debug.Log("裂缝平台初始化 - 位置: " + originalPosition);
     }
 
     // Update is called once per frame
@@ -37,9 +46,10 @@ public class crack : MonoBehaviour
         // 如果正在下落，不需要额外操作
     }
     
-    // 碰撞检测
-    private void OnTriggerEnter(Collider other)
+    // 2D版本的触发器检测
+    private void OnTriggerEnter2D(Collider2D other)
     {
+        Debug.Log("Crack检测到触发器碰撞: " + other.tag);
         // 检查碰撞物体是否为玩家
         if (other.CompareTag(playerTag) && !isFalling)
         {
@@ -48,9 +58,10 @@ public class crack : MonoBehaviour
         }
     }
     
-    // 碰撞检测（如果使用的是碰撞器而非触发器）
-    private void OnCollisionEnter(Collision collision)
+    // 2D版本的碰撞检测
+    private void OnCollisionEnter2D(Collision2D collision)
     {
+        Debug.Log("Crack检测到碰撞: " + collision.gameObject.tag);
         // 检查碰撞物体是否为玩家
         if (collision.gameObject.CompareTag(playerTag) && !isFalling)
         {
@@ -62,25 +73,31 @@ public class crack : MonoBehaviour
     // 晃动并下落的协程
     private IEnumerator ShakeAndFall()
     {
+        if (isFalling) yield break; // 防止重复触发
+        
+        Debug.Log("开始晃动效果");
         isFalling = true;
         float elapsed = 0.0f;
         
-        // 晃动阶段
         while (elapsed < shakeTime)
         {
-            // 随机位置偏移
-            Vector3 randomOffset = Random.insideUnitSphere * shakeIntensity;
+            // 2D随机偏移 (只在X和Y方向)
+            Vector3 randomOffset = new Vector3(
+                Random.Range(-shakeIntensity, shakeIntensity),
+                Random.Range(-shakeIntensity, shakeIntensity),
+                0
+            );
             transform.position = originalPosition + randomOffset;
             
             elapsed += Time.deltaTime;
             yield return null;
         }
         
-        // 恢复原始位置
         transform.position = originalPosition;
         
-        // 启用重力并允许物理作用
-        rb.isKinematic = false;
-        rb.useGravity = true;
+        Debug.Log("晃动结束，开始下落");
+        // 2D物理系统下落设置
+        rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.gravityScale = 1;
     }
 }
